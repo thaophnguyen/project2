@@ -46,92 +46,279 @@ class_diag <- function(score, truth, positive, cutoff=.5){
 
 # Mining, Classification, Prediction
 
-## Name and EID here
+## Thao Nguyen, tpn433
 
 ### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc. See instructions for more information
+The `bechdel` dataset is a combination of the merged `join3` dataset from [Project 1](https://thaophnguyen.github.io/project1/), originally from IMDb, and the `raw_bechdel` dataset from the week of 03/09/21's tidytuesday on [GitHub](https://github.com/rfordatascience/tidytuesday/tree/master/data/2021/2021-03-09), sourced via Bechdeltest.com API. The `bechdel` dataset works only with movies and contains 7,628 observations from 1970-2020. Its variables include `year`, the year a movie was released, `id`, the movie's unique IMDb identifier, `rating`, the movie's Bechdel rating (1 if it passes the first Bechdel criteria, it has at least two named women in it, 2 if it passes the second criteria, those women talk to each other, 3, if it passes the third, the the topic of their conversation is something besides a man, and 0 if it does not pass any of the three criteria), binary variables (`zero`, `one`, `two`, `three`) for whether a movie passed each individual criteria, `runtime`, the length of a movie in minutes, `avgRating`, the movie's average IMDb rating as of 11/01/2021, `numVotes`, and the number of reviews a movie has on IMDb as of 11/01/2021. Looking at the binary variables `one`, `two`, and `three`, respectively, 6993 observations passed the first criteria 5300 passed the second criteria, and 4581 passed the third.
+
 
 ```{R}
 library(tidyverse)
-# read your datasets in here, e.g., with read_csv()
+# bechdel dataset
+raw_bechdel <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2021/2021-03-09/raw_bechdel.csv')
+head(raw_bechdel)
 
-# if your dataset needs tidying, do so here
+# creates binary variables for each bechdel criteria (0 = does not meet any, 1 = has at least two named women in it, 2 = who talk to each other, 3 = about something besides a man.)
+raw_bechdel2 <- raw_bechdel %>% 
+  mutate(zero = ifelse(rating==0, 1, 0)) %>% 
+  mutate(one = ifelse(rating>=1, 1, 0)) %>%
+  mutate(two = ifelse(rating>=2, 1, 0)) %>%
+  mutate(three = ifelse(rating==3, 1, 0)) %>%
+  select(-2) %>%
+  rename(id = 'imdb_id')
 
-# any other code here
+# add 'tt' to imdb id
+raw_bechdel2$id <- sub("^", "tt", raw_bechdel2$id )
+
+# merged dataset from project 1
+head(join3)
+
+# keeps only movie types, remove adult films, remove tv show-related columns
+movie <- join3 %>% 
+  filter(type == 'movie') %>%
+  filter(isAdult == 0) %>% 
+  select(-'originalTitle',-'isAdult') %>%
+  rename('title' = 'title.x') %>% 
+  mutate_all(funs(str_replace(., "\\\\N", NA_character_))) %>%
+  select(1:4, 6:9)
+
+# makes numerical columns numeric
+cols_num <- c(4:5, 7:8)
+movie[cols_num] <- sapply(movie[cols_num], as.numeric)
+
+# left joins raw_bechdel2 and movie dataset
+bechdel <- left_join(raw_bechdel2, movie, by = 'id')
+bechdel <- bechdel %>% select(-'type') %>% select(-'title.y') %>% select(-'startYear') %>%
+  rename('title' = 'title.x') %>% 
+  filter(year >= 1970)
+
+bechdel %>% filter(one == 1) %>% nrow()
+bechdel %>% filter(two == 1) %>% nrow()
+bechdel %>% filter(three == 1) %>% nrow()
+
+# removes instances of duplicate or missing ids
+bechdel <- bechdel %>% distinct(id, .keep_all= TRUE) %>% filter(!is.na(id))
+
 ```
 
 ### Cluster Analysis
 
 ```{R}
 library(cluster)
-# clustering code here
+library(GGally)
+
+bechdel$three <- as.character(as.numeric(bechdel$three))
+
+dat2 <- bechdel %>% 
+  mutate_if(is.character, as.factor) %>%
+  column_to_rownames('id') %>% 
+  select(year, avgRating, numVotes, three)
+
+# computes gower dissimilarities
+gower1 <- daisy(dat2, metric = 'gower')
+
+# use silhouette width to pick number of pam clusters
+sil_width <- vector()
+for(i in 2:10){
+  pam_fit <- pam(gower1, diss = TRUE, k = i)
+  sil_width[i] <- pam_fit$silinfo$avg.width
+}
+ggplot() +
+  geom_line(aes(x = 1:10, y = sil_width)) +
+  scale_x_continuous(name = 'k', breaks = 1:10) # optimal number of clusters is 2
+
+# perform clustering with pam
+pam3 <- pam(gower1, k = 2, diss = T)
+pam3
+
+bechdel %>% filter(id == 'tt0800308')
+bechdel %>% filter(id == 'tt0924129')
+
+# calculate avg sil width
+pam3$silinfo$avg.width
+
+# visualization
+ggpairs(as.data.frame(dat2), columns = 1:4, aes(color=as.factor(pam3$clustering)))
+
+
 ```
 
-Discussion of clustering here
+I performed PAM clustering based on gower dissimilarities on the numeric variables `year`, `avgRating`, and `numVotes`, along with the categorical variable `three`, whether or not an observation passes all three Bechdel test criteria. After getting a distance matrix by computing the gower dissimilarities, I picked the number of clusters to run the PAM with using the highest average silhouette width, which was 2. Running the PAM cluster analysis with 2 clusters showed that the 2008 movie "Appaloosa" was representative of the first cluster while the 2009 movie "Crossing Over" was representative of the second cluster. The average silhouette width is 0.74, indicating that a strong goodness of fit of the cluster solution. Looking at the visualization using ggpairs, the two clusters are very similar and have a lot of overlap in the three numeric variables but are very distinct in the Bechdel test variable.
     
     
 ### Dimensionality Reduction with PCA
 
 ```{R}
-# PCA code here
+dat3 <- bechdel %>% select(id, year, avgRating, numVotes)
+dat3_nums <- dat3 %>% select_if(is.numeric) %>% scale
+rownames(dat3_nums) <- dat3$id
+dat3_pca <- princomp(na.omit(dat3_nums), cor = T)
+
+summary(dat3_pca, loadings=T)
+
+# calculate eigen values to determine how many pcs to keep
+eigval <- dat3_pca$sdev^2
+eigval
+
+# biplot combining plot with pc scores with respect to the first 2 pcs and loadings plot
+library(factoextra)
+fviz_pca_biplot(dat3_pca)
+
+# highest on PC1
 ```
 
-Discussions of PCA here. 
+I performed PCA on the numeric variables `year`, `avgRating`, and `numVotes`, using princomp() on the correlation matrix. Since PC1 and PC2 had Eigen values larger than 1, those were the the PCs that I retained. Looking at the biplot created with fviz_pca(), it can be seen that `avgRating` and `numVotes` are negatively correlated with `year`. The loading summary for the PCA shows that  PC1 has large negative associations with `avgRating` and `numVotes` so it represents the general IMDb rating axis, and explains 46.8% of the total variance in the dataset. A high score on PC1 means a movie had more reviews with higher average ratings while a low score meansa movie has less review with lower average ratings. PC2 has large positive associations with `year` and `numVotes` and explains 33.6% of the total variance in the dataset. A high score on PC1 means a movie was released later and had more reviews while a low score means a movie was released earlier and had less reviews.
 
 ###  Linear Classifier
 
 ```{R}
-# linear classifier code here
+# drops NAs
+no_miss <- bechdel %>% select(three, year, avgRating, numVotes, runtime, rating) %>% na.omit
+
+# logistic regression
+logistic_fit <- glm(three == "1" ~ year + avgRating + numVotes + runtime, data = no_miss, 
+    family = "binomial")
+
+# gets predicted probabilities
+prob_reg <- predict(logistic_fit, type = "response")
+class_diag(prob_reg, no_miss$three, positive = "1")
+
 ```
 
 ```{R}
-# cross-validation of linear classifier here
+# cross-validation of linear classifier
+set.seed(322)
+k = 10
+
+data <- sample_frac(no_miss)  #randomly order rows
+folds <- rep(1:k, length.out = nrow(data))  #create folds
+
+diags <- NULL
+
+i = 1
+for (i in 1:k) {
+    # create training and test sets
+    train <- data[folds != i, ]
+    test <- data[folds == i, ]
+    truth <- test$three
+    
+    # train model
+    fit <- glm(three == "1" ~ year + avgRating + numVotes + runtime, data = train, 
+        family = "binomial")  
+    
+    # test model
+    probs <- predict(fit, newdata = test, type = "response")  
+    
+    # get performance metrics for each fold
+    diags <- rbind(diags, class_diag(probs, truth, positive = "1"))
+}
+
+library(caret)
+
+# average performance metrics across all folds
+summarize_all(diags, mean)
 ```
 
-Discussion here
+I used the logistic regression linear classifier to predict the passing of all three criteria of the Bechdel test (response variable `three`) using the numeric variables `year`, `avgRating`, `numVotes`, and `runtime`. With an AUC of 0.58 after training the model to the entire dataset, using it to get predictions for all observations, and running the class_diag function to get in-sample performance, the model is performing poorly and movies that passed the Bechdel test cannot be distinguished from those that don't. After performing k-fold cross validation on this same model and running the class_diag function to get out-of-sample performance averaged across 10 folds, there was no noticeable decrease in AUC when predicting out of sample, only by 0.003, therefore this model does not show signs of overfitting. 
+
+##################Finally, report a confusion matrix.
 
 ### Non-Parametric Classifier
 
 ```{R}
 library(caret)
-# non-parametric classifier code here
+# knn
+knn_fit <- knn3(three == "1" ~ year + avgRating + numVotes + runtime, data = no_miss)
+
+knn_prob <- predict(knn_fit, newdata = no_miss)[, 2]
+class_diag(knn_prob, no_miss$three, positive = "1")
 ```
 
 ```{R}
-# cross-validation of np classifier here
+# cross validation
+set.seed(332)
+k = 10
+
+data <- sample_frac(no_miss)  #randomly order rows
+folds <- rep(1:k, length.out = nrow(data))  #create folds
+
+diags <- NULL
+
+i = 1
+for (i in 1:k) {
+    # create training and test sets
+    train <- data[folds != i, ]
+    test <- data[folds == i, ]
+    truth <- test$three
+    
+    # train model
+    fit <- knn3(three == "1" ~ year + avgRating + numVotes + runtime, data = train) 
+    
+    # test model
+    probs <- predict(fit, newdata = test)[, 2]  
+    
+    # get performance metrics for each fold
+    diags <- rbind(diags, class_diag(probs, truth, positive = "1"))
+}
+
+# average performance metrics across all folds
+summarize_all(diags, mean)
+
 ```
 
-Discussion
+I used the k-nearest-neighbors non-parametric classifier to predict the passing of all three criteria of the Bechdel test (response variable `three`) using the numeric variables `year`, `avgRating`, `numVotes`, and `runtime` again. With an AUC of 0.77 after training the model to the entire dataset, using it to get predictions for all observations, and running the class_diag function to get in-sample performance, the kNN model is performing better than the logistic regression model. After performing k-fold cross validation on this same model and running the class_diag function to get out-of-sample performance averaged across 10 folds, there was a noticeable decrease in AUC when predicting out of sample, by 0.24, therefore this model does show signs of overfitting. Both the linear and nonparametric models performed roughly the same in their cross-validation performances.
 
+##################Finally, report a confusion matrix.
 
 ### Regression/Numeric Prediction
 
 ```{R}
-# regression model code here
+# linear regression model
+fit<-lm(rating ~ year + avgRating + numVotes + runtime, data = no_miss)
+yhat<-predict(fit)
+
+# calculate mean squared error
+mean((no_miss$rating-yhat)^2)
 ```
 
 ```{R}
-# cross-validation of regression model here
+# cross-validation of regression model
+set.seed(322)
+k = 10 
+data<-no_miss[sample(nrow(no_miss)),] #randomly order rows
+folds<-cut(seq(1:nrow(no_miss)),breaks=k,labels=F) #create folds
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,]
+  test<-data[folds==i,]
+  ## Fit linear regression model to training set
+  fit<-lm(rating ~ year + avgRating + numVotes + runtime,data=train)
+  ## Get predictions/y-hats on test set (fold i)
+  yhat<-predict(fit,newdata=test)
+  ## Compute prediction error  (MSE) for fold i
+  diags<-mean((test$rating-yhat)^2) 
+}
+mean(diags) ## get average MSE across all folds (much higher error)!
 ```
 
-Discussion
+I fit a linear regression model to the entire dataset to predict the numeric variable `rating`, the number of Bechdel criteria met, from `year`, `avgRating`, `numVotes`, and `runtime`. The MSE for the overall dataset was 1.08. After performing k-fold CV on this same model, the average MSE across the k testing folds was calculated to be 1.07. Since there was no noticeable change, this model does not show signs of overfitting.
 
 ### Python 
 
 ```{R}
 library(reticulate)
+pass_2020 <- bechdel %>% filter(rating == 3, year == 2020, avgRating >= 7.5, numVotes >= 5000) 
+pass_2020_titles <- pass_2020[, 'title']
 ```
 
 ```{python}
-# python code here
+title_list = r.pass_2020_titles['title'].tolist()
+for title in title_list:
+  print(title)
 ```
 
-Discussion
-
-### Concluding Remarks
-
-Include concluding remarks here, if any
+I wanted to find the popular (at least 5,000 reviews) movies released in 2020 with an average IMDb rating of at lease 7.5 that passed all three of the Bechdel test criteria. I created a dataframe in R containing just these titles, then used reticulate to turn the dataframe into a list and print each movie in that list using Python.
 
 
 
