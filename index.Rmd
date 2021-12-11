@@ -72,7 +72,46 @@ raw_bechdel2 <- raw_bechdel %>%
 raw_bechdel2$id <- sub("^", "tt", raw_bechdel2$id )
 
 # merged dataset from project 1
-head(join3)
+basics_init <- read_tsv('https://datasets.imdbws.com/title.basics.tsv.gz') 
+ratings_init <- read_csv('https://datasets.imdbws.com/title.ratings.tsv.gz')
+episode_init <- read_tsv('https://datasets.imdbws.com/title.episode.tsv.gz')
+ratings_tidy <- ratings_init %>%
+  separate(`tconst	averageRating	numVotes`, into = c('id', 'avgRating', 'numVotes'), sep = '\\s')
+
+basics_tidy <- basics_init %>% 
+  rename('id' = 1, 'type' = 2, 'title' = 3, 'startYear' = 6, 'endYear' = 7, 'runtime' = 8)
+
+episode_tidy <- episode_init %>%
+  rename('id' = 1, 'showId' = 2, 'seasonNum' = 3, 'epNum' = 4)
+
+basics_tidy2 <- basics_tidy %>% select(id, title) %>% rename('showId' = 1)
+
+basics_tidy %>%
+  summarise(n = n())
+basics_tidy %>%
+  summarise(n_distinct(id))
+ratings_tidy %>%
+  summarise(n = n())
+ratings_tidy %>%
+  summarise(n_distinct(id))
+episode_tidy %>%
+  summarise(n = n())
+episode_tidy %>%
+  summarise(n_distinct(id))
+
+join1 <- basics_tidy %>% right_join(ratings_tidy, by = 'id')
+join1 %>%
+  summarise(n = n())
+join1 %>%
+  summarise(n_distinct(id))
+
+join2 <- join1 %>% left_join(episode_tidy, by = 'id')
+join2 %>%
+  summarise(n = n())
+join2 %>%
+  summarise(n_distinct(id))
+
+join3 <- join2 %>% left_join(basics_tidy2, by = 'showId')
 
 # keeps only movie types, remove adult films, remove tv show-related columns
 movie <- join3 %>% 
