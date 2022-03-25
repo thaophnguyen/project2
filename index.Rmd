@@ -180,7 +180,6 @@ pam3$silinfo$avg.width
 # visualization
 ggpairs(as.data.frame(dat2), columns = 1:4, aes(color=as.factor(pam3$clustering)))
 
-
 ```
 
 I performed PAM clustering based on gower dissimilarities on the numeric variables `year`, `avgRating`, and `numVotes`, along with the categorical variable `three`, whether or not an observation passes all three Bechdel test criteria. After getting a distance matrix by computing the gower dissimilarities, I picked the number of clusters to run the PAM with using the highest average silhouette width, which was 2. Running the PAM cluster analysis with 2 clusters showed that the 2008 movie "Appaloosa" was representative of the first cluster while the 2009 movie "Crossing Over" was representative of the second cluster. The average silhouette width is 0.74, indicating that a strong goodness of fit of the cluster solution. Looking at the visualization using ggpairs, the two clusters are very similar and have a lot of overlap in the three numeric variables but are very distinct in the Bechdel test variable.
