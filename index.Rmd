@@ -1,6 +1,6 @@
 ---
 title: 'Project 2: Data Mining, Classification, Prediction'
-author: "SDS322E"
+author: "Elements of Data Science"
 date: ''
 output:
   html_document:
@@ -62,7 +62,7 @@ head(raw_bechdel)
 # creates binary variables for each bechdel criteria (0 = does not meet any, 1 = has at least two named women in it, 2 = who talk to each other, 3 = about something besides a man.)
 raw_bechdel2 <- raw_bechdel %>% 
   mutate(zero = ifelse(rating==0, 1, 0)) %>% 
-  mutate(one = ifelse(rating>=1, 1, 0)) %>%
+  mutate(one = ifelse(rating>=1, 1, 0) %>%
   mutate(two = ifelse(rating>=2, 1, 0)) %>%
   mutate(three = ifelse(rating==3, 1, 0)) %>%
   select(-2) %>%
@@ -261,8 +261,6 @@ summarize_all(diags, mean)
 
 I used the logistic regression linear classifier to predict the passing of all three criteria of the Bechdel test (response variable `three`) using the numeric variables `year`, `avgRating`, `numVotes`, and `runtime`. With an AUC of 0.58 after training the model to the entire dataset, using it to get predictions for all observations, and running the class_diag function to get in-sample performance, the model is performing poorly and movies that passed the Bechdel test cannot be distinguished from those that don't. After performing k-fold cross validation on this same model and running the class_diag function to get out-of-sample performance averaged across 10 folds, there was no noticeable decrease in AUC when predicting out of sample, only by 0.003, therefore this model does not show signs of overfitting. 
 
-##################Finally, report a confusion matrix.
-
 ### Non-Parametric Classifier
 
 ```{R}
@@ -307,8 +305,6 @@ summarize_all(diags, mean)
 ```
 
 I used the k-nearest-neighbors non-parametric classifier to predict the passing of all three criteria of the Bechdel test (response variable `three`) using the numeric variables `year`, `avgRating`, `numVotes`, and `runtime` again. With an AUC of 0.77 after training the model to the entire dataset, using it to get predictions for all observations, and running the class_diag function to get in-sample performance, the kNN model is performing better than the logistic regression model. After performing k-fold cross validation on this same model and running the class_diag function to get out-of-sample performance averaged across 10 folds, there was a noticeable decrease in AUC when predicting out of sample, by 0.24, therefore this model does show signs of overfitting. Both the linear and nonparametric models performed roughly the same in their cross-validation performances.
-
-##################Finally, report a confusion matrix.
 
 ### Regression/Numeric Prediction
 
