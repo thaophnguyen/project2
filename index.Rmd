@@ -46,7 +46,7 @@ class_diag <- function(score, truth, positive, cutoff=.5){
 
 # Mining, Classification, Prediction
 
-## Thao Nguyen, tpn433
+## Thao Nguyen
 
 ### Introduction 
 
