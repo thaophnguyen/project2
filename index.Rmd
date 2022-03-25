@@ -1,6 +1,6 @@
 ---
 title: 'Project 2: Data Mining, Classification, Prediction'
-author: "Elements of Data Science"
+author: "Elements of Data Science Fall 2021"
 date: ''
 output:
   html_document:
